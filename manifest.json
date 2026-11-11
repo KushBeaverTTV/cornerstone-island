@@ -1,0 +1,16 @@
+{
+  "schemaVersion": 1,
+  "id": "cornerstone.island",
+  "name": "Cornerstone Island",
+  "version": "2.0.0",
+  "author": "Kush Beaver Productionz",
+  "license": "MIT",
+  "description": "An Apple-style Dynamic Island for Omarchy: music, notifications, timers, calendar, system popups and live activities in a notch at the top of the screen, in your theme's colors.",
+  "kinds": [
+    "panel"
+  ],
+  "keepLoaded": true,
+  "entryPoints": {
+    "panel": "Island.qml"
+  }
+}
