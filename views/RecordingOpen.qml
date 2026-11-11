@@ -75,6 +75,19 @@ Item {
     width: parent.width - view.pad * 2
     height: view.look.s(44)
 
+    // The cover and the song open the app that is playing.
+    MouseArea {
+      anchors.left: parent.left
+      anchors.right: transport.left
+      height: parent.height
+      enabled: view.media.canShow
+      cursorShape: Qt.PointingHandCursor
+      onClicked: {
+        view.media.showWindow()
+        view.island.stage.collapse()
+      }
+    }
+
     Cover {
       id: art
       anchors.left: parent.left

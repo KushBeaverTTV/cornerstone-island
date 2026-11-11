@@ -4,7 +4,8 @@ A Dynamic-Island style pill at the top of the screen, part of the Cornerstone
 desktop by Kush Beaver Productionz.
 
 It shows music (cover art, the song, an equaliser, and a full player with
-seek, previous and next, and a "Play on" output picker), screen recording,
+seek, previous and next, and a "Play on" output picker; click the cover or
+the song there to bring the app that is playing to the front), screen recording,
 the microphone or camera in use, a timer and a stopwatch, the next meeting
 and a month calendar, Bluetooth devices coming and going, volume and
 brightness, charging and low battery, notifications with an inbox, short
@@ -35,6 +36,7 @@ omarchy-shell dynamic-island timer 25m "Focus"
 omarchy-shell dynamic-island stopwatch start|pause|toggle|reset
 omarchy-shell dynamic-island calendar
 omarchy-shell dynamic-island expand|collapse|toggle
+omarchy-shell dynamic-island showPlayer       # bring the app that is playing to the front
 omarchy-shell dynamic-island reserveSpace on|off|toggle
 omarchy-shell dynamic-island state
 omarchy-shell dynamic-island demo <kind>     # every state on demand; "demo off" ends it

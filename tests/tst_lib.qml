@@ -276,4 +276,11 @@ TestCase {
     compare(back.slice(4), ["cornerstone.island", "/state", "/b.lua"])
     verify(back[2].indexOf("[ $? -eq 4 ] || exit 0") !== -1)
   }
+
+  function test_show_player_arguments() {
+    var argv = Scripts.showPlayerWindow("brave.instance8261", "Prime Video: Hunting Season", "", "Brave")
+    compare(argv.slice(4), ["org.mpris.MediaPlayer2.brave.instance8261", "Prime Video: Hunting Season", "", "Brave"])
+    verify(argv[2].indexOf("Hunting") === -1)
+    compare(Scripts.showPlayerWindow("org.mpris.MediaPlayer2.spotify", "a", "spotify", "Spotify")[4], "org.mpris.MediaPlayer2.spotify")
+  }
 }

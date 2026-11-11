@@ -1,8 +1,10 @@
 import QtQuick
 import Quickshell
+import Quickshell.Io
 import Quickshell.Services.Mpris
 import "../lib/Players.js" as Players
 import "../lib/Format.js" as Format
+import "../lib/Scripts.js" as Scripts
 
 // What is playing, from MPRIS: the player the island follows, its track,
 // cover, position and transport. A demo can stand in for the player.
@@ -104,6 +106,27 @@ Item {
     var to = Format.clamp01(fraction) * length
     player.position = to
     position = to
+  }
+
+  // ---- the app behind it: bring its window to the front (Spotify, the
+  // browser window with the video, ...). When no window can be found (an
+  // app hidden to the tray), ask the player itself to show it.
+  readonly property bool canShow: present && !standing && !!player
+
+  function showWindow() {
+    if (!canShow || finder.running) return
+    finder.asked = player
+    finder.command = Scripts.showPlayerWindow(player.dbusName, title, player.desktopEntry, player.identity)
+    finder.running = true
+  }
+
+  Process {
+    id: finder
+    property var asked: null
+    onExited: function(code) {
+      if (code !== 0 && asked && asked.canRaise) asked.raise()
+      asked = null
+    }
   }
 
   // MPRIS does not push the position; read it while the player view shows it.

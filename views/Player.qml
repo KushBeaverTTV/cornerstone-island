@@ -70,6 +70,30 @@ Item {
     }
   }
 
+  // The cover and the song open the app that is playing.
+  Rectangle {
+    id: source
+    x: art.x - view.look.s(6)
+    y: art.y - view.look.s(6)
+    width: bars.x - view.look.s(8) - x
+    height: art.height + view.look.s(12)
+    radius: view.look.s(14)
+    color: sourceMouse.containsMouse && view.media.canShow ? view.look.fgFaint : "transparent"
+    Behavior on color { ColorAnimation { duration: view.look.ms(120) } }
+
+    MouseArea {
+      id: sourceMouse
+      anchors.fill: parent
+      hoverEnabled: true
+      enabled: view.media.canShow
+      cursorShape: Qt.PointingHandCursor
+      onClicked: {
+        view.media.showWindow()
+        view.island.stage.collapse()
+      }
+    }
+  }
+
   Cover {
     id: art
     x: view.pad

@@ -74,6 +74,13 @@ Item {
     function removeCalendar(link: string): string { commands.island.calendar.remove(link); return "ok" }
     function addCalendarFromClipboard(): string { commands.island.pasteCalendar(); return "ok" }
 
+    // Bring the app that is playing to the front.
+    function showPlayer(): string {
+      if (!commands.island.media.canShow) return "none"
+      commands.island.media.showWindow()
+      return "ok"
+    }
+
     function state(): string { return JSON.stringify(commands.island.snapshot()) }
     function ping(): string { return "ok" }
   }
