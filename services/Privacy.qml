@@ -20,13 +20,13 @@ Item {
   readonly property var nodes: Pipewire.nodes ? Pipewire.nodes.values : []
 
   // Streams that are not a person being listened to.
-  readonly property var quietStreams: ["peak", "monitor", "cava"]
-  readonly property string dictationRecorder: "cornerstone-dictation"
+  readonly property var quietStreams: ["peak", "monitor", "cava", "gsr-default_output"]
+  readonly property var ownRecorders: ["cornerstone-dictation", "cornerstone-jarvis"]
 
   function isListening(node) {
     if (!node || !node.isStream || node.isSink !== false) return false
     var name = String(node.name || "").toLowerCase()
-    if (name === dictationRecorder) return false
+    if (ownRecorders.indexOf(name) !== -1) return false
     return !quietStreams.some(function(word) { return name.indexOf(word) !== -1 })
   }
 

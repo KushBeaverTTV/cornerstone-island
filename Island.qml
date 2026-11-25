@@ -69,6 +69,7 @@ Item {
   readonly property alias calendar: calendarService
   readonly property alias activities: activitiesService
   readonly property alias dictation: dictationService
+  readonly property alias jarvis: jarvisService
   readonly property alias glance: glanceService
 
   Media { id: mediaService; island: island }
@@ -82,6 +83,7 @@ Item {
   Calendar { id: calendarService; island: island }
   Activities { id: activitiesService; island: island }
   Dictation { id: dictationService; island: island }
+  Jarvis { id: jarvisService; island: island }
   Bluetooth { island: island }
   Glance { id: glanceService; island: island }
 
@@ -174,6 +176,13 @@ Item {
       },
       recording: recorder.live,
       dictation: dictation.live ? dictation.phase : null,
+      jarvis: {
+        phase: jarvis.phase,
+        wakeEnabled: jarvis.wakeEnabled,
+        wakeGated: jarvis.wakeGated,
+        ttsEnabled: jarvis.ttsEnabled,
+        turnCount: jarvis.turnCount
+      },
       mic: privacy.micInUse,
       battery: power.present ? Math.round(power.level * 100) : null,
       brightness: backlight.level,

@@ -49,12 +49,16 @@ PanelWindow {
   Shortcut {
     sequence: "Escape"
     enabled: win.stage.typing
-    onActivated: win.stage.calendarAdding = false
+    onActivated: {
+      win.stage.calendarAdding = false
+      win.stage.jarvisTyping = false
+    }
   }
 
   mask: Region {
     item: body
     Region { item: bubble; intersection: Intersection.Combine }
+    Region { item: jarvisOrb; intersection: Intersection.Combine }
   }
 
   SurfaceGuard {
@@ -86,6 +90,12 @@ PanelWindow {
     if (v === "dictation" || v === "dictation-expanded")
       return { tone: island.dictation.listening ? look.urgent : look.accent, level: 0.9, pulse: true,
                period: island.dictation.listening ? 1600 : 1000 }
+    if (v === "jarvis" || v === "jarvis-expanded") {
+      if (island.jarvis.listening) return { tone: look.urgent, level: 0.95, pulse: true, period: 1400 }
+      if (island.jarvis.speaking) return { tone: look.green, level: 0.9, pulse: true, period: 1100 }
+      if (island.jarvis.busy) return { tone: look.accent, level: 0.9, pulse: true, period: 1000 }
+      return { tone: look.accent, level: 0.65 }
+    }
     if ((v === "activity" || v === "activity-expanded") && item)
       return item.progress >= 0 ? { tone: look.tone(item.color), level: 0.95, progress: item.progress }
                                 : { tone: look.tone(item.color), level: 0.8, pulse: true, period: 1800 }
@@ -377,6 +387,80 @@ PanelWindow {
         anchors.fill: parent
         cursorShape: Qt.PointingHandCursor
         onClicked: win.stage.bubbleClicked()
+      }
+    }
+
+    // Always-on Cornerstone Jarvis voice/agent orb docked beside the island.
+    // Left-click: talk to Jarvis (or stop & send). Right-click: silent quick-type card.
+    // Middle-click: toggle hands-free "Hey Jarvis" wake word.
+    Rectangle {
+      id: jarvisOrb
+
+      readonly property var jarvis: win.island.jarvis
+      readonly property real d: win.look.s(32)
+      readonly property bool shown: !win.stage.open && win.stage.view !== "hidden"
+      readonly property color orbTone: jarvis.listening ? win.look.urgent
+        : (jarvis.speaking ? win.look.green
+        : (jarvis.busy ? win.look.accent
+        : (jarvis.wakeEnabled ? (jarvis.wakeGated ? win.look.orange : win.look.accent) : win.look.fgDim)))
+
+      width: d
+      height: d
+      radius: d / 2
+      y: win.settings.notch ? win.look.s(4) : win.topMargin
+      x: shown
+        ? (win.stage.showBubble ? bubble.x + bubble.width + win.look.s(6) : body.x + body.width + win.look.s(8))
+        : body.x + body.width - d
+      gradient: Gradient {
+        GradientStop { position: 0; color: win.look.bodyTop }
+        GradientStop { position: 1; color: win.look.bodyBottom }
+      }
+      border.width: jarvis.busy ? 1.5 : 1
+      border.color: jarvis.busy ? orbTone : (orbMouse.containsMouse ? win.look.accent : win.look.rim)
+      opacity: shown ? 1 : 0
+      scale: orbMouse.pressed ? 0.92 : (shown ? 1 : 0.96)
+      visible: opacity > 0.01
+
+      Behavior on x { NumberAnimation { duration: win.look.ms(260); easing.type: Easing.Bezier; easing.bezierCurve: win.look.easeOut } }
+      Behavior on opacity { NumberAnimation { duration: win.look.ms(jarvisOrb.shown ? 180 : 120); easing.type: Easing.OutCubic } }
+      Behavior on scale { NumberAnimation { duration: win.look.ms(140); easing.type: Easing.OutCubic } }
+
+      Text {
+        anchors.centerIn: parent
+        textFormat: Text.PlainText
+        text: jarvisOrb.jarvis.speaking ? "\u{f04c3}"
+          : (jarvisOrb.jarvis.thinking || jarvisOrb.jarvis.transcribing ? "✦" : "\u{f036c}")
+        font.family: win.look.mono
+        font.pixelSize: win.look.f(14)
+        color: jarvisOrb.orbTone
+        renderType: Text.NativeRendering
+      }
+
+      // Subtle wake-word / active-thread status dot on the top-right rim
+      Rectangle {
+        visible: jarvisOrb.jarvis.wakeEnabled || jarvisOrb.jarvis.busy || jarvisOrb.jarvis.hasReply
+        width: win.look.s(6)
+        height: width
+        radius: width / 2
+        anchors.right: parent.right
+        anchors.top: parent.top
+        anchors.margins: win.look.s(3)
+        color: jarvisOrb.jarvis.listening ? win.look.urgent
+          : (jarvisOrb.jarvis.busy ? win.look.accent
+          : (jarvisOrb.jarvis.wakeEnabled ? (jarvisOrb.jarvis.wakeGated ? win.look.orange : win.look.green) : win.look.accent))
+      }
+
+      MouseArea {
+        id: orbMouse
+        anchors.fill: parent
+        hoverEnabled: true
+        acceptedButtons: Qt.LeftButton | Qt.RightButton | Qt.MiddleButton
+        cursorShape: Qt.PointingHandCursor
+        onClicked: function(mouse) {
+          if (mouse.button === Qt.RightButton) win.stage.openJarvis(true)
+          else if (mouse.button === Qt.MiddleButton) win.island.jarvis.toggleWake()
+          else win.island.jarvis.orbClick()
+        }
       }
     }
   }

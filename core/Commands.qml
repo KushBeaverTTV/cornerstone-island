@@ -74,6 +74,16 @@ Item {
     function removeCalendar(link: string): string { commands.island.calendar.remove(link); return "ok" }
     function addCalendarFromClipboard(): string { commands.island.pasteCalendar(); return "ok" }
 
+    // Cornerstone Jarvis voice & quick-ask controls.
+    function jarvisListen(): string { commands.island.jarvis.listen(); return "ok" }
+    function jarvisOpen(): string { commands.stage.openJarvis(false); return "ok" }
+    function jarvisType(): string { commands.stage.openJarvis(true); return "ok" }
+    function jarvisAsk(prompt: string): string { commands.island.jarvis.ask(prompt); commands.stage.openJarvis(false); return "ok" }
+    function jarvisStop(): string { commands.island.jarvis.stop(); return "ok" }
+    function jarvisReset(): string { commands.island.jarvis.reset(); return "ok" }
+    function jarvisWake(mode: string): string { commands.island.jarvis.setWake(mode || "toggle"); return "ok" }
+    function jarvisTts(mode: string): string { commands.island.jarvis.setTts(mode || "toggle"); return "ok" }
+
     // Bring the app that is playing to the front.
     function showPlayer(): string {
       if (!commands.island.media.canShow) return "none"

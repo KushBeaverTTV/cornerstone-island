@@ -19,26 +19,29 @@ Item {
   // Which activity an opened island is about (the bubble's, when the
   // bubble was what got clicked).
   property string about: ""
-  // The calendar's "add a link" field. Kept here, not in the view, because
-  // the window takes the keyboard only while it is up.
+  // The calendar's "add a link" field or Jarvis's quick-ask input. Kept here
+  // because the window takes the keyboard only while a text field is active.
   property bool calendarAdding: false
+  property bool jarvisTyping: false
   property bool hovered: false
   // True while the user is actively dragging a slider inside the island, so
   // drifting slightly outside the pill mid-drag does not collapse it.
   property bool interacting: false
 
-  readonly property bool typing: calendarAdding && view === "calendar-expanded"
+  readonly property bool typing: (calendarAdding && view === "calendar-expanded")
+    || (jarvisTyping && view === "jarvis-expanded")
 
   // ---- what is live, by rank
   readonly property var live: Layout.rankLive({
     recording: island.recorder.live,
     dictation: island.dictation.live,
+    jarvis: island.jarvis.live,
     timer: island.clocks.timerActive,
     activity: island.activities.current !== null,
     media: island.media.live,
     stopwatch: island.clocks.stopwatchActive,
     calendar: settings.showCalendar && island.calendar.soon,
-    mic: island.privacy.live,
+    mic: island.privacy.cameraInUse,
     inbox: settings.showInbox && island.notices.inbox.length > 0
   })
   readonly property string primary: live.length > 0 ? live[0] : ""
@@ -102,6 +105,7 @@ Item {
     panel = ""
     about = ""
     calendarAdding = false
+    jarvisTyping = false
     leaveTimer.stop()
   }
 
@@ -113,6 +117,11 @@ Item {
   function openPanel(name, autoCloseMs) {
     panel = name
     expand(autoCloseMs)
+  }
+
+  function openJarvis(startTyping, autoCloseMs) {
+    jarvisTyping = startTyping === true
+    openPanel("jarvis", autoCloseMs || 14000)
   }
 
   // The list of waiting notifications (bell click, or Omarchy's
@@ -195,6 +204,14 @@ Item {
     target: island.notices
     function onInboxChanged() {
       if (stage.open && stage.panel === "inbox" && island.notices.inbox.length === 0) stage.collapse()
+    }
+  }
+
+  // Show Jarvis's reply card cleanly as soon as an answer arrives.
+  Connections {
+    target: island.jarvis
+    function onReplyArrived() {
+      stage.openJarvis(false, 12000)
     }
   }
 }

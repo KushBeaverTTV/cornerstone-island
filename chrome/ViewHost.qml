@@ -20,13 +20,13 @@ Item {
   readonly property var catalog: ({
     "idle": restView, "idle-hover": restView, "hidden": null,
     "media": nowPlayingView, "recording": recordingView, "dictation": listeningView,
-    "mic": inUseView, "inbox": bellView, "timer": timerView, "stopwatch": stopwatchView,
+    "jarvis": jarvisCompactView, "mic": inUseView, "inbox": bellView, "timer": timerView, "stopwatch": stopwatchView,
     "activity": liveView, "calendar": nextUpView,
     "hud-progress": levelView, "hud-label": statusView, "hud-track": trackView, "hud-toast": toastView,
     "notification": bannerView, "notification-actions": bannerView,
     "media-expanded": playerView, "recording-expanded": recordingOpenView,
     "recording-media-expanded": recordingOpenView, "dictation-expanded": dictationOpenView,
-    "idle-expanded": homeView, "clock-expanded": clockOpenView, "activity-expanded": liveOpenView,
+    "jarvis-expanded": jarvisOpenView, "idle-expanded": homeView, "clock-expanded": clockOpenView, "activity-expanded": liveOpenView,
     "calendar-expanded": agendaView, "inbox-expanded": inboxView, "outputs-expanded": outputsView
   })
 
@@ -34,6 +34,7 @@ Item {
   Component { id: nowPlayingView; NowPlaying { island: host.island } }
   Component { id: recordingView; Recording { island: host.island } }
   Component { id: listeningView; Listening { island: host.island } }
+  Component { id: jarvisCompactView; JarvisCompact { island: host.island } }
   Component { id: inUseView; InUse { island: host.island } }
   Component { id: bellView; Bell { island: host.island } }
   Component { id: timerView; Countdown { island: host.island } }
@@ -48,6 +49,7 @@ Item {
   Component { id: playerView; Player { island: host.island } }
   Component { id: recordingOpenView; RecordingOpen { island: host.island } }
   Component { id: dictationOpenView; DictationOpen { island: host.island } }
+  Component { id: jarvisOpenView; JarvisOpen { island: host.island } }
   Component { id: homeView; Home { island: host.island } }
   Component { id: clockOpenView; ClockOpen { island: host.island } }
   Component { id: liveOpenView; LiveOpen { island: host.island } }
