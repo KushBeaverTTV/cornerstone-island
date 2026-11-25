@@ -23,6 +23,9 @@ Item {
   // the window takes the keyboard only while it is up.
   property bool calendarAdding: false
   property bool hovered: false
+  // True while the user is actively dragging a slider inside the island, so
+  // drifting slightly outside the pill mid-drag does not collapse it.
+  property bool interacting: false
 
   readonly property bool typing: calendarAdding && view === "calendar-expanded"
 
@@ -152,11 +155,20 @@ Item {
   }
 
   // Leaving an opened island closes it, the way a notch shelf does, unless
-  // the calendar field has the keyboard.
+  // the calendar field has the keyboard or a slider is being dragged.
   Timer {
     id: leaveTimer
     interval: 500
-    onTriggered: if (!stage.hovered && !stage.typing) stage.collapse()
+    onTriggered: if (!stage.hovered && !stage.typing && !stage.interacting) stage.collapse()
+  }
+
+  onInteractingChanged: {
+    if (interacting) {
+      leaveTimer.stop()
+    } else if (open && !hovered && !typing) {
+      leaveTimer.interval = 500
+      leaveTimer.restart()
+    }
   }
 
   Timer {

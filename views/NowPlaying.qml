@@ -17,7 +17,7 @@ Compact {
     look: view.look
     width: view.look.s(22)
     height: width
-    source: view.media.cover
+    sources: view.media.coverSources
   }
 
   trail: Bars {

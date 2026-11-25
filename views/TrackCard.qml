@@ -17,7 +17,7 @@ Item {
     width: view.look.s(44)
     height: width
     look: view.look
-    source: view.media.cover
+    sources: view.media.coverSources
   }
 
   Bars {

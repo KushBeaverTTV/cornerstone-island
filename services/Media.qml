@@ -7,14 +7,15 @@ import "../lib/Format.js" as Format
 import "../lib/Scripts.js" as Scripts
 
 // What is playing, from MPRIS: the player the island follows, its track,
-// cover, position and transport. A demo can stand in for the player.
+// cover art, per-source volume (from PipeWire or MPRIS), app icon, position
+// and transport. A demo can stand in for the player.
 Item {
   id: media
 
   property var island: null
 
   // undefined: follow the real players. null: act as if nothing plays.
-  // An object { playing, title, artist, art, length }: a pretend player.
+  // An object { playing, title, artist, album, art, length, volume, muted }: a pretend player.
   property var stand: undefined
   readonly property bool standing: stand !== undefined
   readonly property var fake: standing && stand ? stand : null
@@ -24,7 +25,21 @@ Item {
   property string followed: ""
   // Bumped when a player's track or state changes, so `player` is re-chosen.
   property int revision: 0
+  readonly property var eligiblePlayers: { revision; return Players.eligible(players) }
   readonly property var player: { revision; return Players.choose(players, followed) }
+  readonly property int playerCount: fake ? 1 : eligiblePlayers.length
+  readonly property int playerIndex: {
+    if (fake || !player) return 0
+    var idx = eligiblePlayers.indexOf(player)
+    return idx >= 0 ? idx : 0
+  }
+
+  function cyclePlayer(delta) {
+    if (standing || eligiblePlayers.length < 2) return
+    var next = (playerIndex + (delta >= 0 ? 1 : -1) + eligiblePlayers.length) % eligiblePlayers.length
+    followed = Players.idOf(eligiblePlayers[next])
+    revision++
+  }
 
   // Keep following the shown player across a pause. Deferred, so the write
   // does not land inside the evaluation of `player` itself.
@@ -44,6 +59,7 @@ Item {
       }
       function onTrackTitleChanged() { media.revision++ }
       function onTrackArtistChanged() { media.revision++ }
+      function onTrackAlbumChanged() { media.revision++ }
       function onTrackArtUrlChanged() { media.revision++ }
     }
   }
@@ -53,6 +69,7 @@ Item {
   readonly property bool playing: fake ? fake.playing === true : (!standing && !!player && player.isPlaying)
   readonly property string title: fake ? String(fake.title || "") : (player && !standing ? String(player.trackTitle || "") : "")
   readonly property string artist: fake ? String(fake.artist || "") : (player && !standing ? String(player.trackArtist || "") : "")
+  readonly property string album: fake ? String(fake.album || "") : (player && !standing ? String(player.trackAlbum || "") : "")
   readonly property real length: fake ? Number(fake.length) || 0
     : (player && !standing && player.lengthSupported ? player.length : 0)
   readonly property bool canSeek: !standing && !!player && player.canSeek && player.positionSupported
@@ -60,15 +77,196 @@ Item {
   readonly property bool canPrevious: fake ? true : (!standing && !!player && player.canGoPrevious)
   property real position: 0
 
-  // The cover: the player's own, at the best size its CDN offers; for a
-  // player with no real cover (browser video), one looked up by title.
-  readonly property bool hasOwnCover: !!player && !standing && Players.hasCover(player.trackArtUrl)
-  readonly property string cover: fake ? String(fake.art || "")
-    : (hasOwnCover ? Players.sharpCover(player.trackArtUrl) : (present ? artwork.url : ""))
+  // ---- app icon for the playing source (badge and last-resort cover fallback)
+  readonly property string appName: fake ? String(fake.app || "")
+    : (player && !standing ? String(player.identity || player.desktopEntry || "") : "")
+
+  readonly property string appIcon: {
+    if (standing || !player) return ""
+    var appsRev = DesktopEntries.applications.values.length
+    var names = Players.playerIconCandidates(player)
+    for (var i = 0; i < names.length; i++) {
+      var themed = Quickshell.iconPath(names[i], true)
+      if (themed) return themed
+    }
+    for (var j = 0; j < names.length; j++) {
+      var d = DesktopEntries.byId(names[j]) || DesktopEntries.heuristicLookup(names[j])
+      if (d && d.icon) {
+        var icon = String(d.icon)
+        if (icon.charAt(0) === "/") return "file://" + icon
+        var path = Quickshell.iconPath(icon, true)
+        if (path) return path
+      }
+    }
+    return ""
+  }
+
+  // ---- per-source volume: PipeWire playback stream(s) for the current player,
+  // with MPRIS player.volume as fallback for non-browser players without an
+  // active stream (e.g. remote/paused MPRIS player).
+  property real fakeVolume: 0.72
+  property bool fakeMuted: false
+  property real preMuteVolume: 0.5
+
+  readonly property var sourceStreams: (!standing && !!player && !!island && !!island.sound)
+    ? Players.streamsForPlayer(player, island.sound.playbackStreams, players) : []
+  readonly property var primaryStream: sourceStreams.length > 0 ? sourceStreams[0] : null
+  readonly property bool hasStreamVolume: !!primaryStream && !!primaryStream.audio
+  readonly property bool canMprisVolume: !standing && !!player && !!player.volumeSupported && !Players.isBrowser(player)
+  readonly property bool canVolume: fake !== null || hasStreamVolume || canMprisVolume
+
+  readonly property real sourceVolume: {
+    if (fake) return fakeVolume
+    if (hasStreamVolume) return Math.max(0, Number(primaryStream.audio.volume) || 0)
+    if (canMprisVolume) return Math.max(0, Number(player.volume) || 0)
+    return 0
+  }
+
+  readonly property bool sourceMuted: {
+    if (fake) return fakeMuted
+    if (hasStreamVolume) return !!primaryStream.audio.muted
+    if (canMprisVolume) return sourceVolume <= 0.001
+    return false
+  }
+
+  function setSourceVolume(fraction) {
+    var v = Format.clamp01(fraction)
+    if (fake) {
+      fakeMuted = false
+      fakeVolume = v
+      return
+    }
+    if (sourceStreams.length > 0) {
+      for (var i = 0; i < sourceStreams.length; i++) {
+        var s = sourceStreams[i]
+        if (s && s.audio) {
+          s.audio.muted = false
+          s.audio.volume = v
+        }
+      }
+      return
+    }
+    if (canMprisVolume) player.volume = v
+  }
+
+  function toggleSourceMute() {
+    if (fake) {
+      fakeMuted = !fakeMuted
+      return
+    }
+    if (sourceStreams.length > 0) {
+      var next = !sourceMuted
+      for (var i = 0; i < sourceStreams.length; i++) {
+        var s = sourceStreams[i]
+        if (s && s.audio) s.audio.muted = next
+      }
+      return
+    }
+    if (canMprisVolume) {
+      if (sourceVolume > 0.001) {
+        preMuteVolume = sourceVolume
+        player.volume = 0
+      } else {
+        player.volume = preMuteVolume > 0.05 ? preMuteVolume : 0.5
+      }
+    }
+  }
+
+  function nudgeSourceVolume(wheelDelta) {
+    if (!canVolume || wheelDelta === 0) return
+    var base = sourceMuted ? 0 : sourceVolume
+    setSourceVolume(base + (wheelDelta > 0 ? 0.05 : -0.05))
+  }
+
+  // ---- cover art:
+  // 1. Direct player art (Spotify, SoundCloud, Apple Music, local files, etc.),
+  //    upgraded to high-res CDN URL with the original URL kept as fallback.
+  // 2. Browser temp files (/tmp/.com.google.Chrome.XXXX etc.) are inspected:
+  //    opaque album art (YouTube Music, Spotify Web) shows immediately and
+  //    attempts a strict high-res upgrade when small (<= 180 px); transparent
+  //    square browser logos (Prime Video / no-art tabs) are rejected so online
+  //    lookup fetches the real cover/poster instead.
+  readonly property string rawArtUrl: (!standing && player && player.trackArtUrl) ? String(player.trackArtUrl) : ""
+  readonly property bool isBrowserArt: Players.isBrowserTempArt(rawArtUrl)
+
+  // Classification of the current `rawArtUrl` when `isBrowserArt`:
+  // "" (pending) | "logo" | "lowres" | "cover" | "invalid"
+  // chrome/Surface.qml hosts a tiny Canvas inside the PanelWindow (where
+  // Canvas.available is true) and reports the dimensions and corner alphas here.
+  property string browserArtKind: ""
+  property string browserArtCheckedUrl: ""
+
+  function reportBrowserArt(url, w, h, alphas) {
+    if (!url || url !== rawArtUrl) return
+    browserArtCheckedUrl = url
+    browserArtKind = Players.classifyBrowserArt(w, h, alphas)
+  }
+
+  onRawArtUrlChanged: {
+    browserArtKind = ""
+    browserArtCheckedUrl = ""
+  }
+
+  Component.onCompleted: {
+    if (present) {
+      settledTitle = title
+      settledArtist = artist
+      settledAlbum = album
+      announced = signature
+    }
+  }
+
+  readonly property bool browserArtUsable: isBrowserArt
+    && (browserArtKind === "cover" || browserArtKind === "lowres")
+  readonly property bool hasDirectCover: rawArtUrl !== "" && !isBrowserArt
+  readonly property bool hasUsableOwnCover: hasDirectCover || browserArtUsable
+  readonly property bool needsLookup: present && !standing
+    && (!hasUsableOwnCover && (!isBrowserArt || browserArtKind === "logo" || browserArtKind === "invalid"))
+  readonly property bool wantsUpgrade: present && !standing && isBrowserArt && browserArtKind === "lowres"
+    && settledArtist !== "" && settledTitle !== ""
 
   Artwork {
     id: artwork
-    query: media.present && !media.standing && !media.hasOwnCover ? Players.posterQuery(media.settledTitle) : ""
+    title: media.settledTitle
+    artist: media.settledArtist
+    album: media.settledAlbum
+    mode: media.needsLookup ? "missing" : (media.wantsUpgrade ? "upgrade" : "")
+  }
+
+  // Ordered candidate URLs for Cover.qml: best quality first, automatic
+  // fallback to original URL or browser thumbnail if an upgraded/remote URL
+  // fails, and finally the playing app's own icon if no artwork exists at all.
+  readonly property var coverSources: {
+    if (fake) return fake.art ? [String(fake.art)] : []
+    if (!present || standing) return []
+    var list = []
+    function push(u) {
+      var s = String(u || "")
+      if (s !== "" && list.indexOf(s) === -1) list.push(s)
+    }
+    if (hasDirectCover) {
+      push(Players.sharpCover(rawArtUrl))
+      push(rawArtUrl)
+    } else if (browserArtUsable) {
+      // Upgraded studio cover first when strict lookup matched; instant real
+      // browser thumbnail immediately underneath (and shown while lookup runs).
+      if (artwork.url !== "") push(artwork.url)
+      push(rawArtUrl)
+    } else if (artwork.url !== "") {
+      push(artwork.url)
+    }
+    if (list.length === 0 && appIcon !== "") push(appIcon)
+    return list
+  }
+
+  // Primary artwork URL (for ColorQuantizer and single-source callers).
+  // Never hands an icon:// URL to ColorQuantizer when only appIcon is present.
+  readonly property string cover: {
+    if (fake) return String(fake.art || "")
+    if (!present || standing) return ""
+    if (hasDirectCover) return Players.sharpCover(rawArtUrl)
+    if (browserArtUsable) return artwork.url !== "" ? artwork.url : rawArtUrl
+    return artwork.url
   }
 
   // ---- live activity: kept up a while after pausing, like iOS, so a
@@ -145,13 +343,16 @@ Item {
     }
   }
 
-  // ---- track changes: a short now-playing card. Players send title and
-  // artist as separate updates, so it waits for them to settle.
+  // ---- track changes: a short now-playing card. Players send title,
+  // artist and album as separate updates, so it waits for them to settle.
   readonly property string signature: title + "\u0001" + artist
   property string announced: ""
-  // The title once it has settled, for the artwork lookup.
+  // The track metadata once settled, for the artwork lookup.
   property string settledTitle: ""
+  property string settledArtist: ""
+  property string settledAlbum: ""
   onSignatureChanged: settleTimer.restart()
+  onAlbumChanged: if (present) settleTimer.restart()
 
   // A demo swaps the track without it being news.
   function quietly() { Qt.callLater(function() { media.announced = media.signature }) }
@@ -161,6 +362,8 @@ Item {
     interval: 450
     onTriggered: {
       media.settledTitle = media.title
+      media.settledArtist = media.artist
+      media.settledAlbum = media.album
       if (media.signature === media.announced) return
       media.announced = media.signature
       if (media.island.ready && media.island.settings.showTrackChange && media.playing

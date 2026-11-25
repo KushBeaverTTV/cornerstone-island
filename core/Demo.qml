@@ -112,7 +112,7 @@ Item {
       [
         { app: "Slack", appIcon: "slack", summary: "Design review", body: "Can you share the island screenshots?" },
         { app: "Chromium", appIcon: "chromium", summary: "GitHub", body: "Pull request #42 was merged" },
-        { app: "omarchy-update", glyph: Glyphs.UPDATE, summary: "Update available", body: "Omarchy 4.0.5 is ready to install" }
+        { app: "omarchy-update", glyph: Glyphs.PACKAGE, summary: "Update available", body: "Omarchy 4.0.5 is ready to install" }
       ].forEach(function(fields) { island.notices.retire(island.notices.pretend(fields)) })
       stage.openInbox()
     } else if (k === "timer") {

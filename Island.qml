@@ -161,7 +161,17 @@ Item {
       expanded: stage.open,
       hud: hud.current ? hud.current.layout : null,
       hudQueued: hud.queue.length,
-      media: { has: media.present, playing: media.playing, title: media.title },
+      media: {
+        has: media.present,
+        playing: media.playing,
+        title: media.title,
+        artist: media.artist,
+        cover: media.cover,
+        appIcon: media.appIcon,
+        canVolume: media.canVolume,
+        volume: Math.round(media.sourceVolume * 100),
+        muted: media.sourceMuted
+      },
       recording: recorder.live,
       dictation: dictation.live ? dictation.phase : null,
       mic: privacy.micInUse,

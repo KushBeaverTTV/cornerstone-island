@@ -1,16 +1,25 @@
 import QtQuick
 import Quickshell.Services.Pipewire
 import "../lib/Glyphs.js" as Glyphs
+import "../lib/Players.js" as Players
 
 // The default output: its volume HUD, scrolling on the island to change
-// it, and the "Play on" list of every output to move sound to.
+// it, the "Play on" list of every output to move sound to, and the live
+// playback streams so the media player can drive the playing source's volume.
 Item {
   id: sound
 
   property var island: null
 
   readonly property var sink: Pipewire.defaultAudioSink
+  readonly property var playbackStreams: (Pipewire.nodes ? Pipewire.nodes.values : [])
+    .filter(function(n) {
+      return Players.isPlaybackStream(n) && !!n.audio
+        && String(n.name || "").indexOf("omarchy_speaker_tuning") !== 0
+    })
+
   PwObjectTracker { objects: sound.sink ? [sound.sink] : [] }
+  PwObjectTracker { objects: sound.playbackStreams }
 
   readonly property bool ready: !!sink && !!sink.audio
   readonly property real volume: ready ? sink.audio.volume : 0

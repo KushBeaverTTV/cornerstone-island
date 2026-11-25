@@ -239,10 +239,12 @@ Item {
 
   onCurrentChanged: if (bannerTimer.running) bannerTimer.restart()
 
-  // A notification's icon as an image address that will really load, or ""
-  // for the glyph. Quickshell hands an app icon over as image://icon/<name>
-  // even when the theme has no such icon (which draws a magenta
-  // checkerboard), so theme names are checked first.
+  // Ordered, deduplicated icon/image URLs for a notification: sender's own
+  // picture first, then direct app icon, then theme icon names (including
+  // slugified names and aliases), then desktop-entry icons. Quickshell.iconPath
+  // with check=true returns "" for missing icons instead of a checkerboard URL.
+  // Returning a list lets Cover.qml fall back automatically if a temp image
+  // disappeared after a restart.
   function themed(name) {
     var n = String(name || "")
     if (n === "") return ""
@@ -250,22 +252,48 @@ Item {
     return Quickshell.iconPath(n, true) || ""
   }
 
-  function iconFor(entry) {
-    if (!entry || entry.glyph) return ""
+  function iconsFor(entry) {
+    if (!entry || entry.glyph) return []
+    // Keep bindings reactive when installed desktop entries change.
+    var appsRev = DesktopEntries.applications.values.length
+    var list = []
+    function push(url) {
+      var u = String(url || "")
+      if (u !== "" && list.indexOf(u) === -1) list.push(u)
+    }
+
     var image = String(entry.image || "")
     if (image !== "") {
-      if (image.charAt(0) === "/") return "file://" + image
-      if (image.indexOf("image://icon/") === 0) return themed(image.slice(13))
-      return image
+      if (image.charAt(0) === "/") push("file://" + image)
+      else if (image.indexOf("image://icon/") === 0) push(themed(image.slice(13)))
+      else push(image)
     }
-    var icon = String(entry.appIcon || "")
-    if (icon.indexOf("image://icon/") === 0) icon = icon.slice(13)
-    else if (icon.indexOf("://") !== -1) return icon
-    var found = themed(icon)
-    if (found) return found
-    var desktop = entry.desktopEntry ? DesktopEntries.byId(entry.desktopEntry) : null
-    if (!desktop && entry.app) desktop = DesktopEntries.heuristicLookup(entry.app)
-    return desktop && desktop.icon ? themed(desktop.icon) : ""
+
+    var rawIcon = String(entry.appIcon || "")
+    if (rawIcon !== "") {
+      if (rawIcon.charAt(0) === "/") push("file://" + rawIcon)
+      else if (rawIcon.indexOf("image://icon/") === 0) push(themed(rawIcon.slice(13)))
+      else if (rawIcon.indexOf("://") !== -1) push(rawIcon)
+    }
+
+    var want = Notices.iconCandidates(entry)
+    for (var i = 0; i < want.themed.length; i++) {
+      var hit = Quickshell.iconPath(want.themed[i], true)
+      if (hit) { push(hit); break }
+    }
+    for (var j = 0; j < want.entries.length; j++) {
+      var desktop = DesktopEntries.byId(want.entries[j]) || DesktopEntries.heuristicLookup(want.entries[j])
+      if (desktop && desktop.icon) {
+        var resolved = themed(desktop.icon)
+        if (resolved) { push(resolved); break }
+      }
+    }
+    return list
+  }
+
+  function iconFor(entry) {
+    var list = iconsFor(entry)
+    return list.length > 0 ? list[0] : ""
   }
 
   // ------------------------------------------------------------ inbox file

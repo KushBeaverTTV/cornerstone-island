@@ -6,8 +6,8 @@ import "../lib/Format.js" as Format
 import "../lib/Glyphs.js" as Glyphs
 
 // The full player: the cover washed softly behind everything, the song,
-// a seekable bar with elapsed and remaining time, transport controls, and
-// the output the sound goes to.
+// a seekable bar with elapsed and remaining time, transport controls, a
+// per-source volume slider with mute toggle, and the output picker.
 Item {
   id: view
 
@@ -17,7 +17,7 @@ Item {
   readonly property int pad: look.s(22)
   readonly property real corner: look.s(42)
 
-  // The wash: the cover, tiny, blurred and desaturated, painted into a
+  // The wash: the loaded cover, tiny, blurred and desaturated, painted into a
   // shape with the island's own corners so only the backdrop is soft and the
   // edges stay crisp.
   Image {
@@ -25,7 +25,8 @@ Item {
     visible: false
     width: view.width
     height: view.height
-    source: view.media.cover
+    source: art.photoLoaded ? art.activeSource : ""
+    cache: art.activeSource.indexOf("file://") !== 0
     sourceSize.width: 96
     sourceSize.height: 96
     fillMode: Image.PreserveAspectCrop
@@ -101,7 +102,29 @@ Item {
     width: view.look.s(58)
     height: width
     look: view.look
-    source: view.media.cover
+    sources: view.media.coverSources
+  }
+
+  // Subtle app badge on the corner of the album art showing which app is playing.
+  Rectangle {
+    visible: art.photoLoaded && view.media.appIcon !== ""
+    width: view.look.s(20)
+    height: width
+    radius: width / 2
+    x: art.x + art.width - width + view.look.s(4)
+    y: art.y + art.height - height + view.look.s(4)
+    color: view.look.bodyAt(0.35)
+    border.width: Math.max(1, view.look.s(1.5))
+    border.color: view.look.bodyAt(0.35)
+
+    Cover {
+      anchors.fill: parent
+      anchors.margins: view.look.s(2)
+      radius: width / 2
+      look: view.look
+      source: view.media.appIcon
+      placeholder: ""
+    }
   }
 
   Bars {
@@ -130,11 +153,19 @@ Item {
     detail: view.media.artist
   }
 
-  // Elapsed, bar, remaining.
+  // Keep the island open while dragging either slider.
+  Binding {
+    target: view.island.stage
+    property: "interacting"
+    value: seekMeter.dragging || volumeMeter.dragging
+  }
+  Component.onDestruction: if (view.island && view.island.stage) view.island.stage.interacting = false
+
+  // Elapsed, seek bar, remaining.
   Item {
     id: timeline
     x: view.pad
-    y: art.y + art.height + view.look.s(16)
+    y: art.y + art.height + view.look.s(14)
     width: parent.width - view.pad * 2
     height: view.look.s(16)
     visible: view.media.length > 0
@@ -162,6 +193,7 @@ Item {
     }
 
     Meter {
+      id: seekMeter
       anchors.left: elapsed.right
       anchors.leftMargin: view.look.s(10)
       anchors.right: remaining.left
@@ -178,10 +210,52 @@ Item {
     }
   }
 
+  // Multi-player switcher when 2+ players are loaded (e.g. Chrome + Spotify).
   Row {
+    visible: view.media.playerCount > 1
+    anchors.left: parent.left
+    anchors.leftMargin: view.pad - view.look.s(4)
+    anchors.verticalCenter: transport.verticalCenter
+    spacing: view.look.s(2)
+
+    RoundButton {
+      anchors.verticalCenter: parent.verticalCenter
+      width: view.look.s(22)
+      height: width
+      look: view.look
+      glyph: Glyphs.CHEVRON_LEFT
+      glyphSize: 12
+      color: view.look.fgDim
+      onClicked: view.media.cyclePlayer(-1)
+    }
+
+    Label {
+      anchors.verticalCenter: parent.verticalCenter
+      look: view.look
+      mono: true
+      size: 10
+      text: (view.media.playerIndex + 1) + "/" + view.media.playerCount
+      color: view.look.fgDim
+    }
+
+    RoundButton {
+      anchors.verticalCenter: parent.verticalCenter
+      width: view.look.s(22)
+      height: width
+      look: view.look
+      glyph: Glyphs.CHEVRON_RIGHT
+      glyphSize: 12
+      color: view.look.fgDim
+      onClicked: view.media.cyclePlayer(1)
+    }
+  }
+
+  // Transport controls, centred between the timeline (or cover) and the volume row.
+  Row {
+    id: transport
+    readonly property real topEdge: timeline.visible ? (timeline.y + timeline.height) : (art.y + art.height)
     anchors.horizontalCenter: parent.horizontalCenter
-    anchors.bottom: parent.bottom
-    anchors.bottomMargin: view.look.s(14)
+    y: Math.round(topEdge + (volumeRow.y - topEdge - height) / 2)
     spacing: view.look.s(26)
 
     RoundButton {
@@ -233,16 +307,78 @@ Item {
     }
   }
 
-  // Where the sound goes: opens the list of outputs.
-  RoundButton {
-    anchors.right: parent.right
-    anchors.rightMargin: view.pad - view.look.s(8)
+  // Per-source volume control (mute button, draggable/scrollable slider, level)
+  // alongside the "Play on" output picker.
+  Item {
+    id: volumeRow
+    x: view.pad - view.look.s(4)
     anchors.bottom: parent.bottom
-    anchors.bottomMargin: view.look.s(16)
-    look: view.look
-    glyph: view.island.sound.glyph(view.island.sound.sink)
-    glyphSize: 15
-    color: view.look.fgDim
-    onClicked: view.island.stage.openOutputs()
+    anchors.bottomMargin: view.look.s(14)
+    width: parent.width - (view.pad - view.look.s(4)) * 2
+    height: view.look.s(28)
+
+    RoundButton {
+      id: muteButton
+      anchors.left: parent.left
+      anchors.verticalCenter: parent.verticalCenter
+      width: view.look.s(28)
+      height: width
+      look: view.look
+      glyph: Glyphs.volume(view.media.sourceVolume, view.media.sourceMuted)
+      glyphSize: 15
+      color: view.media.sourceMuted ? view.look.fgDim : view.look.fg
+      available: view.media.canVolume
+      onClicked: view.media.toggleSourceMute()
+    }
+
+    RoundButton {
+      id: outputButton
+      anchors.right: parent.right
+      anchors.verticalCenter: parent.verticalCenter
+      width: view.look.s(28)
+      height: width
+      look: view.look
+      glyph: view.island.sound.glyph(view.island.sound.sink)
+      glyphSize: 15
+      color: view.look.fgDim
+      onClicked: view.island.stage.openOutputs()
+    }
+
+    Label {
+      id: volumeReadout
+      anchors.right: outputButton.left
+      anchors.rightMargin: view.look.s(8)
+      anchors.verticalCenter: parent.verticalCenter
+      width: view.look.s(34)
+      horizontalAlignment: Text.AlignRight
+      look: view.look
+      mono: true
+      size: 11
+      text: !view.media.canVolume ? "--" : (view.media.sourceMuted ? "Mute" : Math.round(view.media.sourceVolume * 100) + "%")
+      color: view.look.fgDim
+      opacity: view.media.canVolume ? 1 : 0.45
+    }
+
+    Meter {
+      id: volumeMeter
+      anchors.left: muteButton.right
+      anchors.leftMargin: view.look.s(6)
+      anchors.right: volumeReadout.left
+      anchors.rightMargin: view.look.s(8)
+      anchors.verticalCenter: parent.verticalCenter
+      height: view.look.s(20)
+      look: view.look
+      thickness: view.look.s(5)
+      value: view.media.sourceMuted ? 0 : view.media.sourceVolume
+      color: view.media.sourceMuted ? view.look.fgDim : view.look.fg
+      shaded: true
+      knob: view.media.canVolume
+      seekable: view.media.canVolume
+      liveDrag: true
+      wheelEnabled: view.media.canVolume
+      opacity: view.media.canVolume ? 1 : 0.35
+      onSeek: function(fraction) { view.media.setSourceVolume(fraction) }
+      onWheeled: function(delta) { view.media.nudgeSourceVolume(delta) }
+    }
   }
 }

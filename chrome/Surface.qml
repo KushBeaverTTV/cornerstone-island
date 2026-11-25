@@ -111,6 +111,76 @@ PanelWindow {
     id: stage_
     anchors.fill: parent
 
+    // Inspects browser temp MPRIS art files (e.g. /tmp/.com.google.Chrome.XXXX)
+    // inside the PanelWindow where Canvas.available is true, distinguishing
+    // opaque album art from transparent browser logos.
+    Image {
+      id: browserArtMeasure
+      visible: false
+      cache: false
+      asynchronous: true
+      source: win.island.media.isBrowserArt ? win.island.media.rawArtUrl : ""
+      onStatusChanged: {
+        var url = win.island.media.rawArtUrl
+        if (!win.island.media.isBrowserArt || !url) return
+        if (status === Image.Error) win.island.media.reportBrowserArt(url, 0, 0, null)
+        else if (status === Image.Ready) browserArtProbe.inspect(url)
+      }
+    }
+
+    Canvas {
+      id: browserArtProbe
+      width: 16
+      height: 16
+      opacity: 0
+      enabled: false
+      renderTarget: Canvas.Image
+      property string pendingUrl: ""
+
+      function inspect(url) {
+        if (!url) return
+        pendingUrl = url
+        if (!available) return
+        if (isImageLoaded(url)) unloadImage(url)
+        loadImage(url)
+      }
+
+      onAvailableChanged: {
+        if (available && pendingUrl !== "" && pendingUrl === win.island.media.rawArtUrl)
+          inspect(pendingUrl)
+      }
+
+      onImageLoaded: {
+        var url = pendingUrl
+        if (!url || url !== win.island.media.rawArtUrl) return
+        if (isImageError(url)) {
+          win.island.media.reportBrowserArt(url, 0, 0, null)
+          return
+        }
+        var w = browserArtMeasure.implicitWidth
+        var h = browserArtMeasure.implicitHeight
+        var alphas = null
+        if (available) {
+          var ctx = getContext("2d")
+          if (ctx) {
+            ctx.clearRect(0, 0, width, height)
+            ctx.drawImage(url, 0, 0, width, height)
+            var d = ctx.getImageData(0, 0, width, height).data
+            if (d && d.length >= width * height * 4) {
+              alphas = [
+                d[3],
+                d[(width - 1) * 4 + 3],
+                d[((height - 1) * width) * 4 + 3],
+                d[(height * width - 1) * 4 + 3]
+              ]
+            }
+          }
+        }
+        win.island.media.reportBrowserArt(url, w, h, alphas)
+        unloadImage(url)
+      }
+    }
+
     // The body's size follows the current view's: a quick ease-out, the
     // shell's motion, instead of a spring.
     property real w: win.look.s(win.stage.target.w)

@@ -42,7 +42,7 @@ Item {
     height: width
     radius: Math.round(width * 0.28)
     look: view.look
-    source: view.notices.iconFor(view.entry)
+    sources: view.notices.iconsFor(view.entry)
     placeholder: view.entry && view.entry.glyph ? view.entry.glyph : Glyphs.BELL
     tint: view.tone
   }

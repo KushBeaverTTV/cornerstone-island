@@ -204,19 +204,88 @@ TestCase {
     compare(Players.sharpCover("https://i.scdn.co/image/ab67616d00004851abcdef"), "https://i.scdn.co/image/ab67616d0000b273abcdef")
     compare(Players.sharpCover("https://i1.sndcdn.com/artworks-abc-def-large.jpg"), "https://i1.sndcdn.com/artworks-abc-def-t500x500.jpg")
     compare(Players.sharpCover("https://is1-ssl.mzstatic.com/image/thumb/a/b/100x100bb.jpg"), "https://is1-ssl.mzstatic.com/image/thumb/a/b/600x600bb.jpg")
+    compare(Players.sharpCover("https://lh3.googleusercontent.com/abc=w120-h120-l90-rj"), "https://lh3.googleusercontent.com/abc=w544-h544-l90-rj")
+    compare(Players.sharpCover("https://resources.tidal.com/images/a/b/160x160.jpg"), "https://resources.tidal.com/images/a/b/640x640.jpg")
+    compare(Players.sharpCover("https://f4.bcbits.com/img/a12345_2.jpg"), "https://f4.bcbits.com/img/a12345_10.jpg")
     compare(Players.sharpCover("https://example.com/a.jpg"), "https://example.com/a.jpg")
     verify(!Players.hasCover("file:///tmp/.com.brave.Browser.x/thumb.png"))
+    verify(Players.isBrowserTempArt("file:///tmp/.com.google.Chrome.jAvloq"))
+    verify(!Players.isBrowserTempArt("https://example.com/a.jpg"))
     verify(Players.hasCover("https://example.com/a.jpg"))
+  }
+
+  function test_browser_art_classification() {
+    // 256x256 transparent-corner Chrome/Brave logo is rejected as a logo.
+    compare(Players.classifyBrowserArt(256, 256, [0, 0, 0, 0]), "logo")
+    // 120x120 opaque YouTube Music thumbnail is kept as lowres (usable + upgradable).
+    compare(Players.classifyBrowserArt(120, 120, [255, 255, 255, 255]), "lowres")
+    // 544x544 opaque album cover is already sharp.
+    compare(Players.classifyBrowserArt(544, 544, [255, 255, 255, 255]), "cover")
+    // Non-square video thumbnail with transparent edge is not mistaken for a logo.
+    compare(Players.classifyBrowserArt(480, 360, [0, 0, 0, 0]), "cover")
+    compare(Players.classifyBrowserArt(0, 0, null), "invalid")
+  }
+
+  function test_stream_matching() {
+    var chrome = fakePlayer({ dbusName: "org.mpris.MediaPlayer2.chromium.instance434", identity: "Chrome", isPlaying: true })
+    var spotify = fakePlayer({ dbusName: "org.mpris.MediaPlayer2.spotify", identity: "Spotify", isPlaying: true })
+    var chromeStream = { isStream: true, isSink: true, ready: true, audio: { volume: 0.8, muted: false },
+                         name: "Google Chrome", properties: { "application.name": "Google Chrome", "application.process.binary": "chrome" } }
+    var anonStream = { isStream: true, isSink: true, ready: true, audio: { volume: 0.5, muted: false },
+                       name: "audio-src", properties: { "application.name": "audio-src" } }
+    var discordStream = { isStream: true, isSink: true, ready: true, audio: { volume: 1.0, muted: false },
+                          name: "WEBRTC VoiceEngine", properties: { "application.name": "WEBRTC VoiceEngine" } }
+    verify(Players.isPlaybackStream(chromeStream))
+    verify(!Players.isPlaybackStream({ isStream: false, isSink: true }))
+    verify(Players.isBrowser(chrome))
+    verify(!Players.isBrowser(spotify))
+    compare(Players.streamsForPlayer(chrome, [discordStream, chromeStream, anonStream], [chrome, spotify]), [chromeStream])
+    // Spotify claims the sole anonymous stream when Chrome already matched its named stream.
+    compare(Players.streamsForPlayer(spotify, [discordStream, chromeStream, anonStream], [chrome, spotify]), [anonStream])
+    // Neither claims an anonymous stream if two playing players are both unmatched.
+    var mpv = fakePlayer({ dbusName: "org.mpris.MediaPlayer2.mpv", identity: "mpv", isPlaying: true })
+    compare(Players.streamsForPlayer(spotify, [anonStream], [spotify, mpv]), [])
   }
 
   function test_poster_query_and_parsing() {
     compare(Players.posterQuery("Prime Video: Star Trek: Picard - Season 3"), "Star Trek: Picard")
     compare(Players.posterQuery("Watch Severance | Apple TV+"), "Severance")
+    compare(Players.cleanTrackTitle("Number One (Official Music Video)"), "Number One")
     compare(Players.posterFromTvmaze('[{"show":{"image":{"original":"https://static.tvmaze.com/a.jpg"}}}]'), "https://static.tvmaze.com/a.jpg")
     // Only https image addresses are taken from an answer.
     compare(Players.posterFromTvmaze('[{"show":{"image":{"original":"javascript:alert(1)"}}}]'), "")
     compare(Players.posterFromItunes('{"results":[{"artworkUrl100":"https://a/100x100bb.jpg"}]}'), "https://a/600x600bb.jpg")
     compare(Players.posterFromItunes("not json"), "")
+    var itunesBody = JSON.stringify({
+      results: [
+        { artistName: "Other Artist", trackName: "Number One", collectionName: "Other", artworkUrl100: "https://a/wrong/100x100bb.jpg" },
+        { artistName: "Sally Sossa", trackName: "Number One", collectionName: "Madden NFL 22: The Soundtrack", artworkUrl100: "https://a/right/100x100bb.jpg" }
+      ]
+    })
+    compare(Players.coverFromItunes(itunesBody, "Number One", "Sally Sossa", "EA Sports Madden NFL 22: The Soundtrack", true), "https://a/right/600x600bb.jpg")
+    // Strict mode refuses unrelated songs so a real low-res cover is never replaced with wrong art.
+    compare(Players.coverFromItunes(itunesBody, "Different Song", "Sally Sossa", "", true), "")
+    var deezerBody = JSON.stringify({
+      data: [
+        { title: "Number One", artist: { name: "Sally Sossa" }, album: { title: "Madden NFL 22", cover_big: "https://dz.example/500.jpg" } }
+      ]
+    })
+    compare(Players.coverFromDeezer(deezerBody, "Number One", "Sally Sossa", "Madden NFL 22", true), "https://dz.example/500.jpg")
+    compare(Players.coverFromDeezer(deezerBody, "Wrong", "Sally Sossa", "", true), "")
+  }
+
+  function test_notification_icons() {
+    var c = Notices.iconCandidates({ app: "Cornerstone", appIcon: "", desktopEntry: "" })
+    verify(c.themed.indexOf("cornerstone-hq") !== -1)
+    verify(c.entries.indexOf("cornerstone-hq") !== -1)
+    var g = Notices.iconCandidates({ app: "Google Chrome", appIcon: "", desktopEntry: "" })
+    verify(g.themed.indexOf("google-chrome") !== -1)
+    verify(Notices.isSymbolicIcon("image://icon/network-wireless-symbolic"))
+    verify(Notices.isSymbolicIcon("file:///usr/share/icons/Adwaita/symbolic/status/foo.svg"))
+    verify(!Notices.isSymbolicIcon("file:///usr/share/icons/hicolor/256x256/apps/discord.png"))
+    verify(Notices.isIconSource("image://icon/discord"))
+    verify(Notices.isIconSource("file:///home/u/.local/share/icons/hicolor/512x512/apps/cornerstone-hq.png"))
+    verify(!Notices.isIconSource("https://is1-ssl.mzstatic.com/image/thumb/a/600x600bb.jpg"))
   }
 
   // ---------------------------------------------------------------- Config

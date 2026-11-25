@@ -72,7 +72,7 @@ Item {
         height: width
         radius: Math.round(width * 0.28)
         look: view.look
-        source: view.notices.iconFor(row.modelData)
+        sources: view.notices.iconsFor(row.modelData)
         placeholder: row.modelData.glyph ? row.modelData.glyph : Glyphs.BELL
         tint: row.modelData.critical ? view.look.urgent : view.look.accent
       }

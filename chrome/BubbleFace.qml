@@ -19,7 +19,7 @@ Item {
     height: width
     radius: width / 2
     look: face.look
-    source: face.island.media.cover
+    sources: face.island.media.coverSources
   }
 
   Beacon {
